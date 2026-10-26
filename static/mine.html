@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>我的预约 · 医院门诊号源预约与候补系统</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<div class="navbar">
+  <div class="navbar-inner">
+    <a class="navbar-brand" href="index.html">医院门诊号源预约</a>
+    <nav class="navbar-links">
+      <a href="index.html" data-nav="index.html">号源列表</a>
+      <a href="mine.html" data-nav="mine.html">我的预约</a>
+    </nav>
+    <div class="navbar-user" id="nav-user"></div>
+  </div>
+</div>
+
+<div class="container">
+  <h1 class="page-title">我的预约</h1>
+  <p class="page-desc">这里是你持有的号与正在排的队。</p>
+
+  <div id="content">
+    <div class="loading">加载中…</div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toast-wrap"></div>
+
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  UI.renderNav();
+
+  var contentEl = document.getElementById('content');
+
+  // 这个页面的内容完全属于某个具体的人，没有身份就没有内容。
+  // 刻意不直接跳转登录页：直接跳走的话，用户看到的只是一个突然出现的登录框，
+  // 不知道为什么要登录。先说明原因，再给按钮，是他自己点的。
+  if (!API.currentUser()) {
+    contentEl.innerHTML =
+      '<div class="empty">' +
+      '<div class="empty-title">还没有登录</div>' +
+      '<div class="empty-hint">登录后才能看到你约到的号与排队情况</div>' +
+      '<p style="margin-top:16px">' +
+      '<a class="btn btn-primary" href="login.html?from=mine.html">去登录</a>' +
+      '</p></div>';
+    return;
+  }
+
+  // 事件**只绑一次**，在页面初始化时绑，不在每次 load() 里绑。
+  // 容器 contentEl 本身从不重建，重建的是它的 innerHTML；
+  // 若在 load() 里绑，第二次刷新后点一下会触发两次 ——
+  // 退号会连发两个请求，第二个拿到 409「该预约已取消」，
+  // 用户看到的是一个莫名其妙的错误提示。
+  bind();
+  load();
+
+  function load() {
+    API.mine()
+      .then(function (data) {
+        contentEl.innerHTML = renderAppointments(data.appointments) +
+          renderWaitlist(data.waitlist);
+      })
+      .catch(function (err) {
+        contentEl.innerHTML =
+          '<div class="empty"><div class="empty-title">加载失败</div>' +
+          '<div class="empty-hint">' + UI.escapeHtml(UI.explain(err)) + '</div></div>';
+      });
+  }
+
+  // ------------------------------------------------------------------
+  // 我的预约
+  // ------------------------------------------------------------------
+
+  function renderAppointments(items) {
+    var title =
+      '<h2 class="section-title">持有的号（' + items.length + '）</h2>';
+
+    if (!items.length) {
+      return (
+        title +
+        '<div class="empty">' +
+        '<div class="empty-title">还没有约到号</div>' +
+        '<div class="empty-hint"><a href="index.html">去号源列表看看 →</a></div>' +
+        '</div>'
+      );
+    }
+
+    return title + items.map(appointmentCard).join('');
+  }
+
+  function appointmentCard(appt) {
+    // 候补转正是一个有故事的状态：这个号不是你抢到的，是排队等来的。
+    // 只对它显示来源标签，普通预约的"直接预约"对用户没有信息量。
+    var sourcePart = '';
+    if (appt.source === 'promoted') {
+      sourcePart =
+        '<span class="badge-source">' + UI.escapeHtml(appt.source_label) + '</span>';
+    }
+
+    // 刻意不做"查看医生"的链接：
+    // 我的预约接口返回的是 schedule_id，没有 doctor_id，
+    // 拼出来的链接会指向错误的医生。
+    // 宁可少一个入口，也不给一个会把用户带到错地方去的按钮。
+    var head =
+      '<div class="card-head">' +
+        '<div>' +
+          '<span class="doctor-name">' + UI.escapeHtml(appt.doctor_name) + '</span>' +
+          '<span class="dept-tag">' + UI.escapeHtml(appt.department) + '</span>' +
+        '</div>' +
+        '<span class="status status-' + appt.status + '">' +
+          UI.escapeHtml(appt.status_label) +
+        '</span>' +
+      '</div>';
+
+    // 序号是患者最关心的数字，单独放大。
+    // 排版上它应该和"日期/科室"一样一眼扫到，而不是混在一行小字里。
+    var line =
+      '<div class="slot-line">' +
+        '<span>' + UI.formatDate(appt.work_date) + ' ' +
+          UI.escapeHtml(appt.period_label) + '</span>' +
+        '<span class="seq-no">' +
+          '<span class="num">' + appt.seq_no + '</span>' +
+          '<span class="unit">号</span>' +
+        '</span>' +
+        sourcePart +
+      '</div>';
+
+    var foot =
+      '<div class="card-foot">' +
+        '<span class="card-note">' + footNote(appt) + '</span>' +
+        '<span class="card-actions">' + footButtons(appt) + '</span>' +
+      '</div>';
+
+    return '<div class="card">' + head + line + foot + '</div>';
+  }
+
+  // 卡片底部那句提示：不同状态下用户需要知道的信息完全不同。
+  // 待确认的人需要知道"什么时候截止"；已签到的人不需要再惦记什么。
+  function footNote(appt) {
+    if (appt.status === 'pending' && appt.confirm_deadline) {
+      return (
+        '请在 <span class="deadline">' +
+        UI.escapeHtml(timeOf(appt.confirm_deadline)) +
+        '</span> 前确认，逾期将自动顺延给下一位'
+      );
+    }
+    if (appt.checked_in_at) {
+      return '签到于 ' + UI.escapeHtml(appt.checked_in_at);
+    }
+    if (appt.status === 'no_show') {
+      return '就诊日已过且未签到，已记爽约';
+    }
+    return '预约于 ' + UI.escapeHtml(appt.created_at);
+  }
+
+  // 从 "2026-10-25 16:45:00" 里取出 "16:45:00" 这一段。
+  // 后端给的是完整时间戳，但用户只需要"几点前"，日期他已经在卡片上看到了。
+  function timeOf(ts) {
+    var parts = String(ts).split(' ');
+    return parts.length > 1 ? parts[1] : String(ts);
+  }
+
+  // 该显示哪些按钮，由后端给的 can_* 标志决定，前端**不自己按 status 推断**。
+  //
+  // 尤其"能不能签到"依赖"今天是不是就诊日"，这个判断必须用服务端的时钟：
+  // 拿浏览器本地时间去比，用户改一下系统时间就能给自己变出一个签到按钮。
+  // 后端给标志，等于把"能不能做"这件事也收归单一权威 ——
+  // 与"前端不预先判断号源还有没有"是同一个道理。
+  function footButtons(appt) {
+    var html = '';
+    if (appt.can_confirm) {
+      html +=
+        '<button class="btn btn-primary" data-confirm="' + appt.id + '">确认</button>';
+    }
+    if (appt.can_check_in) {
+      html +=
+        '<button class="btn btn-primary" data-checkin="' + appt.id + '">签到</button>';
+    }
+    if (appt.can_cancel) {
+      html +=
+        '<button class="btn btn-danger" data-cancel="' + appt.id + '">退号</button>';
+    }
+    return html;
+  }
+
+  // ------------------------------------------------------------------
+  // 我的候补
+  // ------------------------------------------------------------------
+
+  function renderWaitlist(items) {
+    var title = '<h2 class="section-title">候补队列（' + items.length + '）</h2>';
+
+    if (!items.length) {
+      return (
+        title +
+        '<div class="empty">' +
+        '<div class="empty-title">没有在排队</div>' +
+        '<div class="empty-hint">号源满了也能排队，有人退号时会自动递补</div>' +
+        '</div>'
+      );
+    }
+
+    return title + items.map(waitlistCard).join('');
+  }
+
+  function waitlistCard(item) {
+    var head =
+      '<div class="card-head">' +
+        '<div>' +
+          '<span class="doctor-name">' + UI.escapeHtml(item.doctor_name) + '</span>' +
+          '<span class="dept-tag">' + UI.escapeHtml(item.department) + '</span>' +
+        '</div>' +
+        '<span class="pos-badge">\u25B2 第 ' + item.position + ' 位</span>' +
+      '</div>';
+
+    var ahead = item.position - 1;
+    var note = ahead > 0
+      ? '前面还有 ' + ahead + ' 人，有人退号时会自动递补到你'
+      : '你是队首，有人退号时第一个给你';
+
+    var line =
+      '<div class="slot-line">' +
+        '<span>' + UI.formatDate(item.work_date) + ' ' +
+          UI.escapeHtml(item.period_label) + '</span>' +
+        '<span class="time-weak">加入于 ' + UI.escapeHtml(item.joined_at) + '</span>' +
+      '</div>';
+
+    var foot =
+      '<div class="card-foot">' +
+        '<span class="card-note">' + note + '</span>' +
+        '<button class="btn btn-outline" data-leave="' + item.id + '">退出排队</button>' +
+      '</div>';
+
+    return '<div class="card card-waiting">' + head + line + foot + '</div>';
+  }
+
+  // ------------------------------------------------------------------
+  // 操作
+  //
+  // 整块内容每刷新一次就整体重建，所以事件必须**委托**到外层容器上。
+  // 直接给按钮绑的话，重建后绑在旧节点上的监听就全丢了。
+  // ------------------------------------------------------------------
+
+  function bind() {
+    contentEl.addEventListener('click', function (event) {
+      var cancelBtn = event.target.closest('[data-cancel]');
+      var leaveBtn = event.target.closest('[data-leave]');
+      var confirmBtn = event.target.closest('[data-confirm]');
+      var checkinBtn = event.target.closest('[data-checkin]');
+      if (cancelBtn) return doCancel(cancelBtn);
+      if (leaveBtn) return doLeave(leaveBtn);
+      if (confirmBtn) return doConfirm(confirmBtn);
+      if (checkinBtn) return doCheckIn(checkinBtn);
+    });
+  }
+
+  // 确认与签到都**不需要二次确认弹窗**，退号才需要。
+  //
+  // 差别在于后果的可逆性：退号是不可逆的（号立刻给了别人），
+  // 而确认和签到都是"往前走一步"的常规动作，
+  // 给它们也加弹窗，只会训练用户闭着眼睛点"确定"——
+  // 等真到了退号那一步，弹窗已经失去警告作用了。
+
+  function doConfirm(btn) {
+    disable(btn, '确认中…');
+
+    API.confirmAppointment(+btn.getAttribute('data-confirm'))
+      .then(function (data) {
+        UI.toast(data.message, 'success', 6000);
+        load();
+      })
+      .catch(function (err) {
+        UI.toast(UI.explain(err), 'error', 6000);
+        // 出错后一定要刷新：最常见的原因是"确认超时"，
+        // 这时页面上的那张待确认卡片已经不该存在了。
+        // 不刷新的话，用户会对着一张过期的卡片反复点。
+        load();
+      });
+  }
+
+  function doCheckIn(btn) {
+    disable(btn, '签到中…');
+
+    API.checkIn(+btn.getAttribute('data-checkin'))
+      .then(function (data) {
+        UI.toast(data.message, 'success', 6000);
+        load();
+      })
+      .catch(function (err) {
+        UI.toast(UI.explain(err), 'error', 6000);
+        load();
+      });
+  }
+
+  function disable(btn, text) {
+    btn.disabled = true;
+    btn.textContent = text;
+  }
+
+  function doCancel(btn) {
+    if (!confirm(
+      '确定要退掉这个号吗？\n\n' +
+      '退号后系统会立刻把它递补给候补队列的第一位，你自己也拿不回来了。'
+    )) {
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = '退号中…';
+
+    API.cancelAppointment(+btn.getAttribute('data-cancel'))
+      .then(function (data) {
+        // 后端把递补结果直接写在 message 里
+        // （"已退号，王五自动转正，接过 1 号"）——
+        // 这个信息只有后端知道：谁排在队首、他接了几号，前端无从推断。
+        UI.toast(data.message, 'success', 8000);
+        load();
+      })
+      .catch(function (err) {
+        UI.toast(UI.explain(err), 'error');
+        load();
+      });
+  }
+
+  function doLeave(btn) {
+    if (!confirm('确定要退出这个候补队列吗？退出后如果还想排，需要重新排到队尾。')) {
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = '处理中…';
+
+    API.leaveWaitlist(+btn.getAttribute('data-leave'))
+      .then(function (data) {
+        UI.toast(data.message, 'info');
+        load();
+      })
+      .catch(function (err) {
+        UI.toast(UI.explain(err), 'error');
+        load();
+      });
+  }
+})();
+</script>
+
+</body>
+</html>

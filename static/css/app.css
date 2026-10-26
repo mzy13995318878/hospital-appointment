@@ -1,0 +1,639 @@
+/* ==========================================================================
+   医院门诊号源预约与候补系统 · 全局样式
+   --------------------------------------------------------------------------
+   两条贯穿全站的设计约束：
+
+   1. **状态不只靠颜色表达**。
+      四种号源状态一律是「颜色 + 形状符号 + 中文文字」三重编码。
+      只靠颜色的话，红绿色盲用户（男性约 8%）看到的就是四个一样的灰块；
+      打印成黑白时更是全部失效。
+      颜色负责"一眼扫过去"，符号和文字负责"确实读出来"。
+
+   2. **颜色变量只在 :root 定义一次**。
+      页面里写 `#2f855a` 这种硬编码色值，改主题时就得全局搜索。
+   ========================================================================== */
+
+:root {
+  /* 主色：医疗蓝，专业且不刺眼 */
+  --c-brand: #1a6fb5;
+  --c-brand-dark: #14568f;
+  --c-brand-light: #e8f2fb;
+
+  /* 四种号源状态：色 + 符号在下面 .status 里配对出现 */
+  --c-open: #2f855a;      /* 可约 */
+  --c-open-bg: #e9f7ef;
+  --c-full: #6b7280;      /* 已满 */
+  --c-full-bg: #f1f2f4;
+  --c-waiting: #c05621;   /* 候补中 */
+  --c-waiting-bg: #fdf2e7;
+  --c-closed: #c53030;    /* 已停诊 */
+  --c-closed-bg: #fdeaea;
+
+  --c-text: #1f2933;
+  --c-text-weak: #6b7280;
+  --c-border: #dfe3e8;
+  --c-bg: #f5f7fa;
+  --c-card: #ffffff;
+
+  --radius: 8px;
+  --shadow: 0 1px 3px rgba(16, 24, 40, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+a {
+  color: var(--c-brand);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+/* --------------------------------------------------------------------------
+   顶部导航（四个页面共用，结构与类名完全一致）
+   -------------------------------------------------------------------------- */
+
+.navbar {
+  background: var(--c-brand);
+  color: #fff;
+  box-shadow: var(--shadow);
+  /* 吸顶：列表往下滚时，导航和身份信息始终可见 */
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.navbar-inner {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 20px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.navbar-brand {
+  font-size: 17px;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+}
+.navbar-brand:hover {
+  text-decoration: none;
+}
+
+.navbar-links {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+}
+
+.navbar-links a {
+  color: rgba(255, 255, 255, 0.82);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+.navbar-links a:hover {
+  background: rgba(255, 255, 255, 0.12);
+  text-decoration: none;
+}
+.navbar-links a.active {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+  font-weight: 600;
+}
+
+.navbar-user {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.9);
+  white-space: nowrap;
+}
+.navbar-user strong {
+  color: #fff;
+}
+.navbar-user .sep {
+  opacity: 0.5;
+  margin: 0 6px;
+}
+.navbar-user a {
+  color: #fff;
+  text-decoration: underline;
+}
+
+/* --------------------------------------------------------------------------
+   主体容器
+   -------------------------------------------------------------------------- */
+
+.container {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 24px 20px 60px;
+}
+
+.page-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+.page-desc {
+  color: var(--c-text-weak);
+  font-size: 13px;
+  margin: 0 0 20px;
+}
+
+/* --------------------------------------------------------------------------
+   状态徽章：三重编码的核心
+   颜色 + 左侧符号 + 文字，三者缺一不可
+   -------------------------------------------------------------------------- */
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  /* 边框让徽章在白底上也有轮廓，不依赖背景色单独存在 */
+  border: 1px solid transparent;
+}
+
+/* 符号用 ::before 生成，形状各不相同 —— 色盲用户靠形状就能区分 */
+.status::before {
+  font-size: 11px;
+  line-height: 1;
+}
+
+.status-open::before    { content: "\25CF"; }  /* ● 实心圆：有号 */
+.status-full::before    { content: "\25A0"; }  /* ■ 实心方：满了 */
+.status-waiting::before { content: "\25B2"; }  /* ▲ 三角：排队中 */
+.status-closed::before  { content: "\2715"; }  /* ✕ 叉号：停诊 */
+
+.status-open {
+  color: var(--c-open);
+  background: var(--c-open-bg);
+  border-color: #b7e1c7;
+}
+.status-full {
+  color: var(--c-full);
+  background: var(--c-full-bg);
+  border-color: #d5d8dc;
+}
+.status-waiting {
+  color: var(--c-waiting);
+  background: var(--c-waiting-bg);
+  border-color: #f0c99a;
+}
+.status-closed {
+  color: var(--c-closed);
+  background: var(--c-closed-bg);
+  border-color: #f0b2b2;
+}
+
+/* 预约记录也有状态，用同一套符号规则但配色更柔和 */
+.status-booked     { color: var(--c-open);    background: var(--c-open-bg);    border-color: #b7e1c7; }
+.status-booked::before     { content: "\25CF"; }
+.status-completed  { color: var(--c-brand);   background: var(--c-brand-light); border-color: #b8d6f0; }
+.status-completed::before  { content: "\2713"; }  /* ✓ 已完成 */
+.status-cancelled  { color: var(--c-text-weak); background: #f1f2f4; border-color: #d5d8dc; }
+.status-cancelled::before  { content: "\2014"; }  /* — 已取消 */
+
+/* R5 加分项新增的两种预约状态，沿用"颜色 + 符号 + 文字"三重编码 */
+.status-pending    { color: var(--c-waiting); background: var(--c-waiting-bg); border-color: #f0c99a; }
+.status-pending::before    { content: "\25B2"; }  /* ▲ 三角：等你确认，过期会顺延 */
+.status-no_show    { color: var(--c-closed); background: var(--c-closed-bg); border-color: #f0b2b2; }
+.status-no_show::before    { content: "\2715"; }  /* ✕ 叉号：占了号没来 */
+
+/* --------------------------------------------------------------------------
+   卡片
+   -------------------------------------------------------------------------- */
+
+.card {
+  background: var(--c-card);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 18px 20px;
+  margin-bottom: 14px;
+}
+
+/* 卡片左侧色条：状态在卡片层面再表达一次，
+   不只是靠右上角那个小徽章 */
+.card-open    { border-left: 4px solid var(--c-open); }
+.card-full    { border-left: 4px solid var(--c-full); }
+.card-waiting { border-left: 4px solid var(--c-waiting); }
+.card-closed  { border-left: 4px solid var(--c-closed); }
+
+.card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.doctor-name {
+  font-size: 17px;
+  font-weight: 600;
+}
+.doctor-title {
+  font-size: 13px;
+  color: var(--c-text-weak);
+  margin-left: 8px;
+  font-weight: 400;
+}
+
+.dept-tag {
+  display: inline-block;
+  font-size: 12px;
+  color: var(--c-brand);
+  background: var(--c-brand-light);
+  border: 1px solid #cfe2f3;
+  border-radius: 4px;
+  padding: 1px 7px;
+  margin-left: 8px;
+  font-weight: 500;
+}
+
+.slot-line {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 14px;
+  color: #374151;
+  margin-bottom: 12px;
+}
+
+/* 号源数字：等宽字体，数字跳动时不会左右抖动 */
+.slot-num {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.slot-remaining {
+  color: var(--c-open);
+  font-weight: 600;
+}
+.slot-remaining.zero {
+  color: var(--c-text-weak);
+}
+
+.card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-top: 1px solid #eef1f4;
+  padding-top: 12px;
+}
+
+.card-note {
+  font-size: 13px;
+  color: var(--c-text-weak);
+}
+
+/* R5：「我的预约」一张卡上可能同时有确认/签到/退号三个按钮。
+   用 flex + gap 排，不写死宽度 —— 按钮文案长短不一时不会互相挤。 */
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* 待确认的截止时刻：这个数字会决定号还在不在手里，给它单独的高亮 */
+.deadline {
+  color: var(--c-waiting);
+  font-weight: 600;
+}
+
+/* --------------------------------------------------------------------------
+   按钮
+   -------------------------------------------------------------------------- */
+
+.btn {
+  display: inline-block;
+  font: inherit;
+  font-size: 14px;
+  padding: 7px 16px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.btn-primary {
+  background: var(--c-brand);
+  color: #fff;
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--c-brand-dark);
+}
+
+.btn-outline {
+  background: #fff;
+  color: var(--c-brand);
+  border-color: #b8d6f0;
+}
+.btn-outline:hover:not(:disabled) {
+  background: var(--c-brand-light);
+}
+
+.btn-danger {
+  background: #fff;
+  color: var(--c-closed);
+  border-color: #f0b2b2;
+}
+.btn-danger:hover:not(:disabled) {
+  background: var(--c-closed-bg);
+}
+
+.btn-default {
+  background: #fff;
+  color: var(--c-text);
+  border-color: var(--c-border);
+}
+.btn-default:hover:not(:disabled) {
+  background: #f5f7fa;
+}
+
+/* 禁用态刻意只降饱和度，不改成灰色块：
+   用户要能看出"这里本来有个按钮，只是现在点不了" */
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-block {
+  display: block;
+  width: 100%;
+  text-align: center;
+}
+
+/* --------------------------------------------------------------------------
+   筛选栏
+   -------------------------------------------------------------------------- */
+
+.filters {
+  background: var(--c-card);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  margin-bottom: 18px;
+  display: flex;
+  gap: 14px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  box-shadow: var(--shadow);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.field label {
+  font-size: 12px;
+  color: var(--c-text-weak);
+  font-weight: 500;
+}
+
+select,
+input[type="text"],
+input[type="date"] {
+  font: inherit;
+  font-size: 14px;
+  padding: 6px 10px;
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--c-text);
+  min-width: 130px;
+}
+select:focus,
+input:focus {
+  outline: 2px solid var(--c-brand-light);
+  border-color: var(--c-brand);
+}
+
+/* --------------------------------------------------------------------------
+   提示条
+   -------------------------------------------------------------------------- */
+
+.toast-wrap {
+  position: fixed;
+  top: 68px;
+  right: 20px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 340px;
+}
+
+.toast {
+  padding: 11px 15px;
+  border-radius: 6px;
+  font-size: 14px;
+  box-shadow: 0 4px 12px rgba(16, 24, 40, 0.15);
+  border-left: 4px solid;
+  animation: toast-in 0.18s ease-out;
+  background: #fff;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* 提示也用符号区分，不只是颜色 */
+.toast-success { border-color: var(--c-open); }
+.toast-success::before { content: "\2713 "; font-weight: 700; color: var(--c-open); }
+
+.toast-error { border-color: var(--c-closed); }
+.toast-error::before { content: "\2715 "; font-weight: 700; color: var(--c-closed); }
+
+.toast-info { border-color: var(--c-brand); }
+.toast-info::before { content: "\2139 "; font-weight: 700; color: var(--c-brand); }
+
+/* --------------------------------------------------------------------------
+   空状态与加载态
+   -------------------------------------------------------------------------- */
+
+.empty {
+  text-align: center;
+  padding: 48px 20px;
+  color: var(--c-text-weak);
+  background: var(--c-card);
+  border: 1px dashed var(--c-border);
+  border-radius: var(--radius);
+}
+.empty-title {
+  font-size: 15px;
+  color: var(--c-text);
+  margin-bottom: 4px;
+}
+.empty-hint {
+  font-size: 13px;
+}
+
+.loading {
+  text-align: center;
+  padding: 48px 20px;
+  color: var(--c-text-weak);
+}
+
+/* --------------------------------------------------------------------------
+   登录页
+   -------------------------------------------------------------------------- */
+
+.login-wrap {
+  max-width: 400px;
+  margin: 60px auto;
+  padding: 0 20px;
+}
+
+.login-card {
+  background: var(--c-card);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 28px;
+}
+
+.login-card h1 {
+  font-size: 19px;
+  margin: 0 0 6px;
+}
+.login-card .sub {
+  font-size: 13px;
+  color: var(--c-text-weak);
+  margin: 0 0 22px;
+}
+
+.login-card .field {
+  margin-bottom: 16px;
+}
+.login-card .field input {
+  width: 100%;
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--c-text-weak);
+  margin-top: 5px;
+}
+
+/* --------------------------------------------------------------------------
+   医生详情页
+   -------------------------------------------------------------------------- */
+
+.doctor-head {
+  background: var(--c-card);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  padding: 22px 24px;
+  margin-bottom: 18px;
+  box-shadow: var(--shadow);
+}
+
+.doctor-head h1 {
+  font-size: 22px;
+  margin: 0 0 6px;
+}
+
+.doctor-meta {
+  font-size: 14px;
+  color: var(--c-text-weak);
+  margin-bottom: 14px;
+}
+
+.doctor-intro {
+  font-size: 14px;
+  color: #374151;
+  margin-bottom: 14px;
+}
+
+.doctor-specialty {
+  font-size: 14px;
+  background: var(--c-brand-light);
+  border: 1px solid #cfe2f3;
+  border-radius: 6px;
+  padding: 10px 14px;
+}
+
+/* --------------------------------------------------------------------------
+   我的预约页
+   -------------------------------------------------------------------------- */
+
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 26px 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-title:first-child {
+  margin-top: 0;
+}
+
+/* 序号是患者最关心的数字，单独放大突出 */
+.seq-no {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  font-variant-numeric: tabular-nums;
+}
+.seq-no .num {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--c-brand);
+  line-height: 1;
+}
+.seq-no .unit {
+  font-size: 13px;
+  color: var(--c-text-weak);
+}
+
+.badge-source {
+  display: inline-block;
+  font-size: 12px;
+  color: var(--c-waiting);
+  background: var(--c-waiting-bg);
+  border: 1px solid #f0c99a;
+  border-radius: 4px;
+  padding: 0 6px;
+  margin-left: 6px;
+}
+
+.pos-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--c-waiting);
+}
+
+.time-weak {
+  font-size: 12px;
+  color: var(--c-text-weak);
+}

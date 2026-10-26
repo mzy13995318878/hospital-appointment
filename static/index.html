@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>号源列表 · 医院门诊号源预约与候补系统</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<div class="navbar">
+  <div class="navbar-inner">
+    <a class="navbar-brand" href="index.html">医院门诊号源预约</a>
+    <nav class="navbar-links">
+      <a href="index.html" data-nav="index.html">号源列表</a>
+      <a href="mine.html" data-nav="mine.html">我的预约</a>
+    </nav>
+    <div class="navbar-user" id="nav-user"></div>
+  </div>
+</div>
+
+<div class="container">
+  <h1 class="page-title">号源列表</h1>
+  <p class="page-desc">选科室、选日期，看到有号就能约；号满了可以排队候补，有人退号时系统会自动通知队首。</p>
+
+  <!-- 筛选栏：三个条件可以任意组合，也可以只用一个 -->
+  <div class="filters">
+    <div class="field">
+      <label for="f-dept">科室</label>
+      <select id="f-dept">
+        <option value="">全部科室</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="f-date">日期</label>
+      <input type="date" id="f-date">
+    </div>
+
+    <div class="field">
+      <label for="f-status">状态</label>
+      <select id="f-status">
+        <option value="">全部状态</option>
+        <option value="open">可约</option>
+        <option value="waiting">候补中</option>
+        <option value="full">已满</option>
+        <option value="closed">已停诊</option>
+      </select>
+    </div>
+
+    <button type="button" class="btn btn-default" id="f-reset">重置</button>
+  </div>
+
+  <div id="list">
+    <div class="loading">加载中…</div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toast-wrap"></div>
+
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  UI.renderNav();
+
+  var listEl = document.getElementById('list');
+  var deptSelect = document.getElementById('f-dept');
+  var dateInput = document.getElementById('f-date');
+  var statusSelect = document.getElementById('f-status');
+  var resetBtn = document.getElementById('f-reset');
+
+  // ------------------------------------------------------------------
+  // 科室下拉框：选项从接口动态取，不写死在页面里
+  //
+  // 写死的话，数据库新增一个科室，前端下拉框里就永远没有它 ——
+  // 而它明明有排班，用户在列表里却筛选不到。
+  // 这类"数据在库里但界面上找不到"的问题最难被发现，
+  // 因为没有任何报错。
+  // ------------------------------------------------------------------
+
+  API.departments()
+    .then(function (items) {
+      items.forEach(function (item) {
+        var option = document.createElement('option');
+        option.value = item.department;
+        // 带上医生数：「口腔科（2 位医生）」比单纯的「口腔科」信息量大
+        option.textContent = item.department + '（' + item.doctor_count + ' 位医生）';
+        deptSelect.appendChild(option);
+      });
+    })
+    .catch(function () {
+      // 科室拉不到时不弹错误、也不清空列表：
+      // 列表本身还能用，只是少了筛选维度。
+      // 一个次要功能失败不该让主要功能一起挂掉。
+    });
+
+  // ------------------------------------------------------------------
+  // 列表
+  // ------------------------------------------------------------------
+
+  function currentFilters() {
+    return {
+      department: deptSelect.value,
+      date: dateInput.value,
+      status: statusSelect.value,
+    };
+  }
+
+  function load() {
+    listEl.innerHTML = '<div class="loading">加载中…</div>';
+    API.schedules(currentFilters())
+      .then(function (schedules) {
+        if (!schedules.length) {
+          listEl.innerHTML =
+            '<div class="empty">' +
+            '<div class="empty-title">没有符合条件的排班</div>' +
+            '<div class="empty-hint">试着放宽筛选条件，或点「重置」看看全部号源</div>' +
+            '</div>';
+          return;
+        }
+        // 卡片渲染交给 UI.scheduleCard：医生详情页用的是同一个函数，
+        // 同一条排班在两个页面上的长相必然一致。
+        listEl.innerHTML = schedules
+          .map(function (s) {
+            return UI.scheduleCard(s);
+          })
+          .join('');
+      })
+      .catch(function (err) {
+        listEl.innerHTML =
+          '<div class="empty"><div class="empty-title">加载失败</div>' +
+          '<div class="empty-hint">' + UI.escapeHtml(UI.explain(err)) + '</div></div>';
+      });
+  }
+
+  // ------------------------------------------------------------------
+  // 预约 / 入候补
+  //
+  // 对前端来说这是**同一个动作**：点一下，后端自己决定给你号还是让你排队。
+  // 前端不预先判断"现在还有没有号" ——
+  // 那样判断完到发出请求之间可能已经有人把最后一个号约走了，
+  // 前端拿到的是一个过期的结论。让后端在同个事务里决定，才不会说谎。
+  // ------------------------------------------------------------------
+
+  listEl.addEventListener('click', function (event) {
+    var btn = event.target.closest('[data-book]');
+    if (!btn) return;
+
+    // 未登录就先去登录，并记下当前页
+    if (!API.requireLogin()) return;
+
+    var scheduleId = +btn.getAttribute('data-book');
+    btn.disabled = true;
+    var original = btn.textContent;
+    btn.textContent = '处理中…';
+
+    API.book(scheduleId)
+      .then(function (data) {
+        if (data.type === 'booked') {
+          UI.toast('预约成功，你的就诊序号是 ' + data.seq_no + ' 号', 'success');
+        } else {
+          // 候补：把名次明确说出来。
+          // 不说名次的话，用户不知道自己排在哪，就只能反复刷新页面看。
+          UI.toast('号源已满，你已排在候补队列第 ' + data.position + ' 位', 'info', 8000);
+        }
+        load();  // 刷新列表：号源数与候补人数都变了
+      })
+      .catch(function (err) {
+        UI.toast(UI.explain(err), 'error');
+        btn.disabled = false;
+        btn.textContent = original;
+        // 出错后也刷新一次：多数错误是因为别人先抢走了号，
+        // 刷新能让用户立刻看到真实情况，而不是对着旧数据再点一次。
+        load();
+      });
+  });
+
+  // ------------------------------------------------------------------
+  // 筛选
+  //
+  // 三个控件共用同一个 load()，因为它们对后端来说都是同一个接口的三个参数。
+  // 刻意不做"前端本地筛选"：后端能筛就交给后端，
+  // 前端筛的前提是已经把所有数据都下载了，数据量一大就浪费。
+  // ------------------------------------------------------------------
+
+  deptSelect.addEventListener('change', load);
+  statusSelect.addEventListener('change', load);
+  dateInput.addEventListener('change', load);
+
+  resetBtn.addEventListener('click', function () {
+    deptSelect.value = '';
+    dateInput.value = '';
+    statusSelect.value = '';
+    load();
+  });
+
+  load();
+})();
+</script>
+
+</body>
+</html>

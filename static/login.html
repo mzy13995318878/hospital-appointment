@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>登录 · 医院门诊号源预约与候补系统</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<div class="login-wrap">
+  <div class="login-card">
+    <h1>实名登录</h1>
+    <p class="sub">三要素一致时直接登录，未登记过则自动建档。</p>
+
+    <form id="login-form" autocomplete="off">
+      <div class="field">
+        <label for="name">姓名</label>
+        <input type="text" id="name" name="name" placeholder="请输入真实姓名" maxlength="20">
+      </div>
+
+      <div class="field">
+        <label for="id-card">身份证号后 4 位</label>
+        <input type="text" id="id-card" name="id_card_last4" placeholder="如 1234 或 123X" maxlength="4">
+        <p class="hint">末位是字母 X 也能登录，系统只校验长度。</p>
+      </div>
+
+      <div class="field">
+        <label for="phone">手机号</label>
+        <input type="text" id="phone" name="phone" placeholder="11 位手机号" maxlength="11">
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-block" id="submit-btn">登录</button>
+    </form>
+
+    <p style="margin: 18px 0 0; font-size: 13px; text-align: center;">
+      <a href="index.html">先随便看看有哪些号 →</a>
+    </p>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  // 已经登录了就别再登录，直接回目标页。
+  // 否则用户在已登录状态下点进登录页，会被卡在一个没有意义的页面里。
+  if (API.currentUser()) {
+    location.href = 'index.html';
+    return;
+  }
+
+  var form = document.getElementById('login-form');
+  var submitBtn = document.getElementById('submit-btn');
+  var nameInput = document.getElementById('name');
+  var idInput = document.getElementById('id-card');
+  var phoneInput = document.getElementById('phone');
+
+  // 从 URL 取登录后要去哪儿。
+  // 没有这个参数时默认回列表页，不会出现"登录完跳到 about:blank"。
+  var from = new URLSearchParams(location.search).get('from') || 'index.html';
+
+  form.addEventListener('submit', function (event) {
+    event.preventDefault();
+
+    var name = nameInput.value.trim();
+    var idCard = idInput.value.trim();
+    var phone = phoneInput.value.trim();
+
+    // 前端先做一遍长度校验，与后端的规则完全一致。
+    // 这里不是"不信任后端"——后端照样会拦——
+    // 而是省掉一次无谓的往返：长度不对的请求后端必然拒绝，
+    // 与其等它回来说不行，不如当场就告诉用户。
+    if (!name) return fail('请填写姓名', nameInput);
+    if (idCard.length !== 4) return fail('身份证后 4 位必须是 4 个字符', idInput);
+    if (phone.length !== 11) return fail('手机号必须是 11 位', phoneInput);
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = '登录中…';
+
+    API.login(name, idCard, phone)
+      .then(function (data) {
+        // 后端返回的是 data.user_id / data.name / data.is_new
+        API.saveUser({ user_id: data.user_id, name: data.name });
+        if (data.is_new) {
+          // 自动建档这件事必须告诉用户，否则他会以为自己输错了名字
+          alert('已为你建档：' + data.name + '（首次登录自动注册）');
+        }
+        location.href = from;
+      })
+      .catch(function (err) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = '登录';
+        fail(err.message || '登录失败');
+      });
+  });
+
+  function fail(message, input) {
+    alert(message);
+    if (input) input.focus();
+  }
+})();
+</script>
+
+</body>
+</html>

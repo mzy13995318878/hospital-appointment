@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+.venv/
+venv/
+env/
+build/
+dist/
+
+# 数据库本身不提交：用 scripts/reset_db.py 会重建
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+
+# 测试与工具缓存
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# 本地环境
+.env
+*.log
+
+# 本地快照工具：属于个人工作流，不是交付物，不进仓库
+/scripts/snapshot.py
+
+# 编辑器与系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

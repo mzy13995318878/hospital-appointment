@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>医生详情 · 医院门诊号源预约与候补系统</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<div class="navbar">
+  <div class="navbar-inner">
+    <a class="navbar-brand" href="index.html">医院门诊号源预约</a>
+    <nav class="navbar-links">
+      <a href="index.html" data-nav="index.html">号源列表</a>
+      <a href="mine.html" data-nav="mine.html">我的预约</a>
+    </nav>
+    <div class="navbar-user" id="nav-user"></div>
+  </div>
+</div>
+
+<div class="container">
+  <div id="doctor-head">
+    <div class="loading">加载中…</div>
+  </div>
+
+  <h2 class="section-title">出诊排班</h2>
+  <div id="list"></div>
+</div>
+
+<div class="toast-wrap" id="toast-wrap"></div>
+
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  UI.renderNav();
+
+  var headEl = document.getElementById('doctor-head');
+  var listEl = document.getElementById('list');
+
+  var doctorId = new URLSearchParams(location.search).get('id');
+
+  // id 缺失或不是数字，后面任何请求都是白跑一趟。
+  // 与其等后端回 404，不如当场说清楚并给用户一条退路。
+  if (!doctorId || !/^\d+$/.test(doctorId)) {
+    renderError('缺少医生编号', '请从列表页点医生姓名进入本页。');
+    return;
+  }
+
+  load();
+
+  function load() {
+    // 医生详情是公开的（不登录也能看），
+    // 但"我的预约"要带身份，没登录时后端直接 401。
+    // 所以只有已登录才把它加进并发任务里 ——
+    // 不登录的用户看到的页面少一个"已持有"标记，功能不受影响。
+    var tasks = [API.doctor(doctorId)];
+    if (API.currentUser()) tasks.push(API.mine());
+
+    Promise.all(tasks)
+      .then(function (results) {
+        render(results[0], results[1]);
+      })
+      .catch(function (err) {
+        renderError(UI.explain(err), '请返回列表页重新选择医生。');
+      });
+  }
+
+  function render(data, mineData) {
+    // 排班卡片的"我已持有几号"要按 schedule_id 查，
+    // 每次渲染时现建这张表 —— 它只在本次渲染内有效，
+    // 不做成全局变量，避免刷新后还拿着旧数据。
+    var mine = {};
+    if (mineData && mineData.appointments) {
+      mineData.appointments.forEach(function (appt) {
+        mine[appt.schedule_id] = { id: appt.id, seq_no: appt.seq_no };
+      });
+    }
+
+    headEl.innerHTML =
+      '<div class="doctor-head">' +
+        '<h1>' + UI.escapeHtml(data.name) + '</h1>' +
+        '<div class="doctor-meta">' +
+          UI.escapeHtml(data.title) +
+          '<span class="dept-tag">' + UI.escapeHtml(data.department) + '</span>' +
+        '</div>' +
+        '<div class="doctor-intro">' + UI.escapeHtml(data.intro) + '</div>' +
+        '<div class="doctor-specialty">擅长：' + UI.escapeHtml(data.specialty) + '</div>' +
+      '</div>';
+
+    if (!data.schedules.length) {
+      listEl.innerHTML =
+        '<div class="empty">' +
+        '<div class="empty-title">该医生暂无出诊排班</div>' +
+        '<div class="empty-hint">可以去列表页看看其它医生</div>' +
+        '</div>';
+      return;
+    }
+
+    // showDoctor: false —— 医生信息已经在页头了，卡片里再写一遍是重复
+    listEl.innerHTML = data.schedules
+      .map(function (s) {
+        return UI.scheduleCard(s, { showDoctor: false, mine: mine });
+      })
+      .join('');
+  }
+
+  function renderError(title, hint) {
+    headEl.innerHTML =
+      '<div class="empty">' +
+      '<div class="empty-title">' + UI.escapeHtml(title) + '</div>' +
+      '<div class="empty-hint">' + UI.escapeHtml(hint) + '</div>' +
+      '</div>';
+    listEl.innerHTML = '';
+  }
+
+  // ------------------------------------------------------------------
+  // 预约 / 退号
+  // ------------------------------------------------------------------
+
+  listEl.addEventListener('click', function (event) {
+    var bookBtn = event.target.closest('[data-book]');
+    var cancelBtn = event.target.closest('[data-cancel]');
+
+    if (bookBtn) return doBook(bookBtn);
+    if (cancelBtn) return doCancel(cancelBtn);
+  });
+
+  function doBook(btn) {
+    if (!API.requireLogin()) return;
+
+    var scheduleId = +btn.getAttribute('data-book');
+    btn.disabled = true;
+    btn.textContent = '处理中…';
+
+    API.book(scheduleId)
+      .then(function (data) {
+        if (data.type === 'booked') {
+          UI.toast('预约成功，你的就诊序号是 ' + data.seq_no + ' 号', 'success');
+        } else {
+          UI.toast('号源已满，你已排在候补队列第 ' + data.position + ' 位', 'info', 8000);
+        }
+        // 刷新：卡片上的号源数、候补人数，以及"你已持有几号"都变了
+        load();
+      })
+      .catch(function (err) {
+        UI.toast(UI.explain(err), 'error');
+        load();
+      });
+  }
+
+  function doCancel(btn) {
+    var appointmentId = +btn.getAttribute('data-cancel');
+
+    // 退号是不可逆的，必须先问一句。
+    // 这条确认同时承载着重要信息：退掉后号会给排队的人，拿不回来。
+    if (!confirm('确定要退掉这个号吗？退号后系统会立刻把它递补给候补队列的第一位，你自己也拿不回来了。')) {
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = '退号中…';
+
+    API.cancelAppointment(appointmentId)
+      .then(function (data) {
+        // 后端把递补结果写进 message 了（"已退号，王五自动转正，接过 1 号"），
+        // 前端原样显示即可 —— 这个信息只有后端知道，前端自己拼不出来。
+        UI.toast(data.message, 'success', 8000);
+        load();
+      })
+      .catch(function (err) {
+        UI.toast(UI.explain(err), 'error');
+        load();
+      });
+  }
+})();
+</script>
+
+</body>
+</html>
