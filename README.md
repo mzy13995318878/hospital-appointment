@@ -1,5 +1,7 @@
 # 医院门诊号源预约与候补系统
 
+**仓库地址：https://github.com/mzy13995318878/hospital-appointment**
+
 > 数媒程序开发组 10 月考核项目 · FastAPI + SQLite + 原生前端 · 零构建
 
 给三甲医院热门科室做的号源预约演示系统。核心机制一句话就能说清：
