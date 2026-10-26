@@ -322,7 +322,9 @@ hospital-appointment/
 | 并发到底怎么保证的 | `docs/CONCURRENCY.md` |
 | 答辩怎么演示 | `docs/DEMO.md` |
 | 评委可能问什么 | `docs/QA.md` |
-| 这个项目踩过哪些坑 | `PROJECT_STATE.md`「关键决策速查」（30 条） |
+| 自我介绍怎么说 | `docs/SELF_INTRO.md`（草稿） |
+| 答辩幻灯片 | `考核答辩演示_叙事版.pptx` |
+| 这个项目踩过哪些坑 | `PROJECT_STATE.md`「关键决策速查」（34 条） |
 
 **答辩前建议跑一次** `python scripts/verify_demo.py`：
 它按 `docs/DEMO.md` 的路线逐条执行一遍（用临时库，不碰演示库），

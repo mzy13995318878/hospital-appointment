@@ -35,3 +35,6 @@ htmlcov/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Office 打开文件时生成的锁文件（~$ 开头），绝不能进仓库
+~$*
