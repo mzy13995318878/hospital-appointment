@@ -21,6 +21,7 @@
 | R5 | 并发验证与加分项 | ✅ 已完成（6/6） | `tests/test_concurrency.py`（4 条）、`tests/test_status_consistency.py`（4 条）、`tests/test_schedules.py`（4 条）、`tests/test_extras.py`（24 条）、`docs/CONCURRENCY.md`，另修 `check_same_thread` 并发 bug、加 `only_future`、**五个加分项全部实现** |
 | R6 | 文档与交付 | ✅ 已完成 | `README.md`、`requirements.txt`、`docs/DEMO.md`、`docs/QA.md`、`scripts/verify_demo.py`（演示路线自检），本文档章节已按轮次正序整理，另补 `API.md` 中 `promoted` 的契约滞后 |
 | R7 | 演示数据扩充 | ✅ 已完成 | `sql/seed.sql`（医生 6→20 / 科室 6→16 / 排班 8→67 / 用户 70→811 / 预约 68→746）、`scripts/reset_db.py`（新增科室分布报告与四项自洽性校验）。表结构与业务代码一行未改 |
+| R8 | 推送 GitHub | ✅ 已完成 | 仓库 <https://github.com/mzy13995318878/hospital-appointment>，公开、分支 `main`、46 个文件入库；README 顶部已放仓库地址。认证走 SSH 密钥（PAT 与 device flow 均失败，原因见 R8 一节） |
 
 **全部六轮完成，59 条测试全绿，五个加分项全部实现。**
 
@@ -771,6 +772,50 @@ R5 加「转正确认超时」时补了两个字段，代码与测试都跟上�
 - `scripts/verify_demo.py` 17/17 全过（演示组 id 未变，台本依然成立）
 - `reset_db.py` 四项自洽性校验全部通过
 - 线上接口实测：16 个科室、67 条排班、状态分布 53/5/5/4
+
+---
+
+## R8 · 代码推送到 GitHub
+
+题目要求（`docs/TASKS.md` R6 一节末尾的「加分动作」）：
+
+> `git init` 推到 GitHub，README 顶部放仓库地址。
+
+**已交付**：<https://github.com/mzy13995318878/hospital-appointment>
+
+- 公开仓库，默认分支 `main`，1 个提交（`363f320`）+ 1 个补交（`5f141fc`）
+- 共 46 个文件入库，经 API 核对无 `.db` / `.log` / `__pycache__` 混入
+
+### 这一轮真正卡住的地方：认证
+
+代码早就提交好了，**卡的全是"怎么证明我是你"**。三条路都试过：
+
+| 途径 | 结果 | 原因 |
+|---|---|---|
+| `gh auth login --web` | ❌ 超时 | Go 程序不读 Windows 系统代理；且它在**轮询等待**用户点授权，而后台进程会随我这一轮结束而死，永远等不到 |
+| 手动 device flow（curl） | ⚠️ 拿到令牌但无权限 | 换来的令牌 `scope` 为空，建仓库返回 `403 Resource not accessible by integration` |
+| PAT（个人访问令牌） | ❌ 401 Bad credentials | 第一次给的令牌无效 |
+| **SSH 密钥** | ✅ **成功** | 公钥交用户贴到 GitHub，私钥不出本机 |
+
+两个值得记住的判断：
+
+1. **怀疑过"网络被劫持"**。因为 device flow 竟返回 integration 令牌，很不正常。
+   查了响应头 `Server: github.com` 与 `x-github-request-id` 都在，TLS 链也验证通过——
+   **是真正的 GitHub 在回话**，凭据没发给第三方。先排除最坏可能，再排查别的。
+2. **gh CLI 是便利工具，不是必需品**。它连不上，改用 git 自带的 SSH 通道一样能推。
+   别因为一个工具不通就以为整条路断了。
+
+### 流程沉淀（下次直接照做）
+
+```bash
+ssh-keygen -t ed25519 -C "<email>" -f ~/.ssh/id_ed25519 -N ""   # 生成密钥
+# → 公钥交给用户贴到 GitHub → Settings → SSH and GPG keys
+git remote add origin git@github.com:<user>/<repo>.git
+GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new" git push -u origin main
+# 若 22 端口不通：~/.ssh/config 配 Hostname ssh.github.com / Port 443
+```
+
+用户侧需要做的只有两件：网页上建**空仓库**（三个初始化选项都别勾）、贴公钥。
 
 ---
 
